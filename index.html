@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Royal Casino Virtual — VIP Edition</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎡%3C/text%3E%3C/svg%3E">
 <script src="https://cdn.tailwindcss.com/3.4.17"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -270,6 +271,7 @@
       <button onclick="addFunds(100)" class="px-2.5 py-1.5 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 text-xs font-bold">+100</button>
       <button onclick="addFunds(500)" class="px-2.5 py-1.5 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 text-xs font-bold">+500</button>
       <button onclick="addFunds(2000)" class="px-2.5 py-1.5 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 text-xs font-bold">+2.000</button>
+      <span class="inline-flex items-center gap-1 ml-1"><input id="fundsInput" type="text" inputmode="numeric" maxlength="5" autocomplete="off" placeholder="0 – 50000" title="Solo números enteros del 0 al 50000" oninput="cleanFunds(this)" onkeydown="if(event.key==='Enter')addCustomFunds()" class="w-24 px-2 py-1.5 rounded-lg bg-slate-950/90 border border-slate-700 focus:border-gold text-xs font-bold text-white text-center focus:outline-none"><button onclick="addCustomFunds()" class="px-2.5 py-1.5 rounded-lg bg-gold text-slate-950 text-xs font-black">+ Añadir</button></span>
       <button onclick="claimBonus()" class="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-300 text-xs font-bold">🎁 Bono VIP</button>
       <button onclick="confirmReset()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold">↺ Reset</button>
     </div>
@@ -3149,9 +3151,18 @@ applyCosmetics=function(){_ac();
 };
 const _u2=updateUI;
 updateUI=function(){_u2();renderShop();const t=COSMETICS.find(c=>c.id===state.activeTitle);if(t&&$('hdrPlayerName'))$('hdrPlayerName').textContent=state.name+' · '+t.text;
- const g=$('avatarPickerGrid');g.style.maxHeight='11rem';g.style.overflowY='auto'};
+ const g=$('avatarPickerGrid'),wr=g.parentElement;
+ if(!g.dataset.big){g.dataset.big=1;wr.className='w-full';wr.style.width='100%';wr.parentElement.style.flexWrap='wrap';
+  g.className='grid gap-2.5';g.style.cssText='grid-template-columns:repeat(auto-fill,minmax(68px,1fr));max-height:26rem;overflow-y:auto;padding:8px;background:#0b1220aa;border-radius:1.25rem;border:1px solid #fbbf2433';
+  const b=$('profBigAvatar');b.style.width='7.5rem';b.style.height='7.5rem';b.style.fontSize='4.5rem';wr.firstElementChild.style.textAlign='left';wr.firstElementChild.style.fontSize='13px';wr.firstElementChild.style.marginBottom='8px'}
+ wr.firstElementChild.textContent='Elige tu Avatar VIP · '+AVATARS.length+' disponibles (comprá más en la tienda)';
+ g.innerHTML=AVATARS.map(av=>'<button onclick="setAvatar(\''+av+'\')" class="rounded-2xl flex items-center justify-center border-2 transition hover:scale-110 '+(state.avatar===av?'bg-amber-500/30 border-gold scale-105':'bg-slate-900 border-slate-800 hover:border-slate-500')+'" style="height:68px;font-size:2.4rem;line-height:1">'+av+'</button>').join('')};
 applyCosmetics();updateUI();
 })();
+</script>
+<script>
+function cleanFunds(el){let v=el.value.replace(/\D/g,'').replace(/^0+(?=\d)/,'');if(v!==''&&+v>50000)v='50000';el.value=v}
+function addCustomFunds(){const el=$('fundsInput');cleanFunds(el);const n=parseInt(el.value,10);if(!n||n<1){showToast('Ingresá un número entero entre 1 y 50.000','lose');return}addFunds(n);showToast('💰 Recargaste $'+fmt(n),'gold');el.value=''}
 </script>
 </body>
 </html>
