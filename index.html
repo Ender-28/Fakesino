@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Royal Casino Virtual — VIP Edition</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎡%3C/text%3E%3C/svg%3E">
 <script src="https://cdn.tailwindcss.com/3.4.17"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -351,6 +350,7 @@
         </button>
         <button title="Plinko" class="tab-btn w-full h-11 rounded-xl px-2.5 flex items-center justify-center gap-3 text-xs sm:text-sm font-bold whitespace-nowrap transition bg-slate-800/80 hover:bg-slate-700 text-slate-200" data-g="plinko"><span class="text-xl shrink-0">🔻</span><span class="nav-label truncate">Plinko</span></button>
         <button title="Estadísticas" class="tab-btn w-full h-11 rounded-xl px-2.5 flex items-center justify-center gap-3 text-xs sm:text-sm font-bold whitespace-nowrap transition bg-slate-800/80 hover:bg-slate-700 text-slate-200" data-g="stats"><span class="text-xl shrink-0">📈</span><span class="nav-label truncate">Estadísticas</span></button>
+        <button title="Generala con amigos" class="tab-btn w-full h-11 rounded-xl px-2.5 flex items-center justify-center gap-3 text-xs sm:text-sm font-bold whitespace-nowrap transition bg-slate-800/80 hover:bg-slate-700 text-slate-200" data-g="gen"><span class="text-xl shrink-0">🎲</span><span class="nav-label truncate">Generala</span></button>
         <button title="Probabilidades y RTP" class="tab-btn w-full h-11 rounded-xl px-2.5 flex items-center justify-center gap-3 text-xs sm:text-sm font-bold whitespace-nowrap transition bg-slate-800/80 hover:bg-slate-700 text-slate-200" data-g="rtp">
           <span class="text-xl shrink-0">📊</span>
           <span class="nav-label truncate">Tabla RTP</span>
@@ -854,6 +854,10 @@
     <canvas id="statsCv" width="640" height="220" class="w-full rounded-2xl bg-slate-900/60"></canvas>
     <div id="statsBox" class="mt-4 text-sm"></div>
     <button class="mt-3 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold" onclick="resetStats()">Borrar historial y stats por juego</button>
+  </section>
+  <section id="gen" class="game-sec hidden glass-card rounded-3xl p-4 sm:p-6 max-w-3xl mx-auto">
+    <h3 class="font-royal text-xl font-bold text-gold mb-2">🎲 GENERALA</h3>
+    <div id="genBody"></div>
   </section>
   <section id="rtp" class="game-sec hidden glass-card rounded-3xl p-5 sm:p-6">
     <h3 class="font-royal text-xl font-bold text-gold mb-2">📊 TRANSPARENCIA MATEMÁTICA & RTP</h3>
@@ -3163,6 +3167,189 @@ applyCosmetics();updateUI();
 <script>
 function cleanFunds(el){let v=el.value.replace(/\D/g,'').replace(/^0+(?=\d)/,'');if(v!==''&&+v>50000)v='50000';el.value=v}
 function addCustomFunds(){const el=$('fundsInput');cleanFunds(el);const n=parseInt(el.value,10);if(!n||n<1){showToast('Ingresá un número entero entre 1 y 50.000','lose');return}addFunds(n);showToast('💰 Recargaste $'+fmt(n),'gold');el.value=''}
+</script>
+<div id='cfgFx' style='position:fixed;inset:0;z-index:2147483000;pointer-events:none'></div>
+<button id='cfgBtn' aria-label='Configuración' title='Configuración y accesibilidad' onclick='cfgOpen()' style='position:fixed;right:16px;bottom:16px;z-index:9990;width:54px;height:54px;border-radius:9999px;font-size:26px;background:linear-gradient(135deg,#fbbf24,#b45309);box-shadow:0 6px 20px #000a;border:2px solid #fff6;cursor:pointer'>⚙️</button>
+<div id='cfgOverlay' style='display:none;position:fixed;inset:0;z-index:9995;background:#000b;align-items:center;justify-content:center;padding:12px' onclick='if(event.target===this)cfgClose()'><div class='glass-card' style='border-radius:1.5rem;padding:20px;width:100%;max-width:640px;max-height:90vh;overflow-y:auto'><div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'><h3 class='font-royal text-gold' style='font-size:1.25rem;font-weight:800'>⚙️ CONFIGURACIÓN</h3><button onclick='cfgClose()' aria-label='Cerrar' style='font-size:22px;padding:4px 12px;border-radius:10px;background:#1e293b'>✕</button></div><div id='cfgBody'></div></div></div>
+<script>
+/* ===== CONFIGURACIÓN: pantalla + accesibilidad ===== */
+(function(){
+const D={ratio:'auto',scale:100,auto:false,theme:'dark',bright:100,text:100,font:'normal',calm:false};
+state.settings=Object.assign({},D,state.settings||{});
+const C=()=>state.settings;
+const RATIOS=[['auto','Automático (todo el ancho)',0],['16:9','16:9',16/9],['16:10','16:10',1.6],['21:9','21:9 ultra ancho',21/9],['4:3','4:3',4/3],['1:1','1:1 cuadrado',1],['9:16','9:16 vertical',9/16]];
+const THEMES=[['dark','🌙 Oscuro (por defecto)','#0b1220'],['light','☀️ Claro','#f1f5f9'],['contrast','⚪ Alto contraste','#000'],['oled','⚫ Negro OLED','#000'],['cb','Daltonismo rojo-verde (azul/naranja)','linear-gradient(90deg,#38bdf8,#fb923c)'],['tri','Daltonismo azul-amarillo (rosa)','#f472b6'],['gray','◐ Escala de grises','linear-gradient(90deg,#222,#ddd)'],['warm','🔆 Cálido, luz suave','#d9a066']];
+const FX={light:'invert(1) hue-rotate(180deg)',gray:'grayscale(1)',warm:'sepia(.55) saturate(1.1)',contrast:'contrast(1.25)'};
+const css=document.createElement('style');
+css.textContent=`*:focus-visible{outline:3px solid #fbbf24!important;outline-offset:2px}
+.cfg-calm *{animation:none!important}
+html[data-font=legible] *{font-family:'Atkinson Hyperlegible',system-ui,sans-serif!important}
+html[data-font=mono] *{font-family:ui-monospace,Menlo,Consolas,monospace!important}
+html[data-theme=oled] body,html[data-theme=contrast] body{background:#000!important}
+html[data-theme=oled] .glass-card{background:#000!important;border-color:#fbbf2455!important}
+html[data-theme=contrast] .glass-card{background:#000!important;border:2px solid #fff!important}
+html[data-theme=contrast] [class*=text-slate-]{color:#fff!important}
+html[data-theme=contrast] [class*=bg-slate-]{background-color:#0a0a0a!important;border-color:#fff!important}
+html[data-theme=cb] .text-emerald-300,html[data-theme=cb] .text-emerald-400,html[data-theme=cb] .text-green-400{color:#38bdf8!important}
+html[data-theme=cb] .text-rose-300,html[data-theme=cb] .text-rose-400,html[data-theme=cb] .text-red-400{color:#fb923c!important}
+html[data-theme=cb] [class*=bg-emerald-]{background-color:#0369a1!important}
+html[data-theme=cb] [class*=bg-rose-],html[data-theme=cb] [class*=bg-red-]{background-color:#c2410c!important}
+html[data-theme=cb] [class*=border-emerald-]{border-color:#38bdf8!important}
+html[data-theme=cb] [class*=border-rose-]{border-color:#fb923c!important}
+html[data-theme=tri] .text-gold,html[data-theme=tri] [class*=text-amber-]{color:#f9a8d4!important}
+html[data-theme=tri] .border-gold{border-color:#f9a8d4!important}
+html[data-theme=tri] .bg-gold,html[data-theme=tri] .gold-btn{background:#ec4899!important;color:#fff!important}`;
+document.head.appendChild(css);
+function apply(){
+ const c=C(),h=document.documentElement,b=document.body;
+ h.dataset.theme=c.theme;h.dataset.font=c.font;h.classList.toggle('cfg-calm',c.calm);h.style.fontSize=c.text+'%';
+ const z=c.auto?Math.min(Math.max(Math.min(innerWidth/1280,innerHeight/720),.75),1.75):c.scale/100;
+ b.style.zoom=z;
+ const r=RATIOS.find(x=>x[0]===c.ratio);
+ b.style.maxWidth=r&&r[2]?Math.round(innerHeight*r[2]/z)+'px':'';b.style.marginLeft='auto';b.style.marginRight='auto';
+ const fx=((FX[c.theme]||'')+(c.bright!==100?' brightness('+c.bright/100+')':'')).trim()||'none';
+ const e=$('cfgFx');e.style.backdropFilter=fx;e.style.webkitBackdropFilter=fx;
+ if(c.font==='legible'&&!$('cfgFont')){const l=document.createElement('link');l.id='cfgFont';l.rel='stylesheet';l.href='https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap';document.head.appendChild(l)}
+ saveState();
+}
+function render(){
+ const c=C();
+ const bt=(k,v,t)=>{const on=v==='toggle'?c[k]===true:String(c[k])===String(v);return `<button data-k='${k}' data-v='${v}' style='padding:7px 11px;border-radius:10px;font-size:12px;font-weight:700;margin:3px;border:2px solid ${on?'#fbbf24':'transparent'};background:${on?'#fbbf2433':'#1e293b'};color:#fff'>${t}</button>`};
+ const sl=(k,min,max,l)=>`<div style='margin:8px 0'><div style='font-size:12px;color:#cbd5e1'>${l}: <b id='cfgv_${k}'>${c[k]}%</b></div><input type='range' data-k='${k}' min='${min}' max='${max}' step='5' value='${c[k]}' style='width:100%'></div>`;
+ const hd=t=>`<div style='font-size:13px;font-weight:800;color:#fbbf24;margin:16px 0 4px'>${t}</div>`;
+ const tb=THEMES.map(t=>{const on=c.theme===t[0];return `<button data-k='theme' data-v='${t[0]}' style='padding:8px 10px;border-radius:12px;font-size:12px;font-weight:700;margin:3px;border:2px solid ${on?'#fbbf24':'transparent'};background:${on?'#fbbf2433':'#1e293b'};color:#fff;text-align:left'><span style='display:inline-block;width:14px;height:14px;border-radius:50%;background:${t[2]};border:1px solid #fff8;margin-right:6px;vertical-align:-2px'></span>${t[1]}</button>`}).join('');
+ $('cfgBody').innerHTML=hd('🖥️ Pantalla y relación de aspecto')+
+ `<div style='font-size:11px;color:#94a3b8'>Limita el ancho de la página según la altura de tu monitor. Útil en pantallas ultra anchas o verticales.</div>`+
+ RATIOS.map(r=>bt('ratio',r[0],r[1])).join('')+
+ sl('scale',70,160,'Tamaño de la interfaz')+
+ bt('auto','toggle','📐 Escala automática al monitor: '+(c.auto?'SÍ':'NO'))+bt('fs','x','⛶ Pantalla completa')+
+ hd('♿ Accesibilidad · Temas')+tb+
+ sl('bright',60,130,'Brillo')+sl('text',90,150,'Tamaño del texto')+
+ hd('🔤 Tipo de letra')+bt('font','normal','Normal')+bt('font','legible','Muy legible (Atkinson)')+bt('font','mono','Monoespaciada')+
+ hd('🎛️ Otras opciones')+bt('calm','toggle','🐢 Reducir animaciones: '+(c.calm?'SÍ':'NO'))+bt('mute','x','Sonido: '+(isMuted?'🔇 apagado':'🔊 activo'))+bt('reset','x','↺ Restablecer todo');
+}
+$('cfgBody').addEventListener('click',e=>{
+ const t=e.target.closest('button');if(!t||!t.dataset.k)return;const k=t.dataset.k,v=t.dataset.v;
+ if(k==='fs'){try{const p=document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();if(p&&p.catch)p.catch(()=>showToast('Tu navegador no permite pantalla completa aquí','info'))}catch(x){showToast('Pantalla completa no disponible','info')}return}
+ if(k==='mute'){toggleMute();render();return}
+ if(k==='reset')state.settings=Object.assign({},D);
+ else if(v==='toggle')C()[k]=!C()[k];
+ else C()[k]=(typeof D[k]==='number')?+v:v;
+ apply();render();
+});
+$('cfgBody').addEventListener('input',e=>{const k=e.target.dataset.k;if(!k)return;C()[k]=+e.target.value;$('cfgv_'+k).textContent=e.target.value+'%';apply()});
+window.cfgOpen=()=>{render();$('cfgOverlay').style.display='flex'};
+window.cfgClose=()=>{$('cfgOverlay').style.display='none'};
+addEventListener('keydown',e=>{if(e.key==='Escape')cfgClose()});
+addEventListener('resize',()=>{if(C().auto||C().ratio!=='auto')apply()});
+apply();
+})();
+</script>
+<script>
+/* ===== GENERALA + SALAS ===== */
+(function(){
+const CATS=[1,2,3,4,5,6,'E','F','P','G'],LAB={1:'1️⃣ Unos',2:'2️⃣ Doses',3:'3️⃣ Treses',4:'4️⃣ Cuatros',5:'5️⃣ Cincos',6:'6️⃣ Seises',E:'Escalera',F:'Full',P:'Póker',G:'Generala'},DI=['⚀','⚁','⚂','⚃','⚄','⚅'];
+const esc=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+let mode='menu',room=null,me=null,myGid=0,settled=0,stake=0,pick=0,tmr=null,myPeer='me',code_='',seenLobby=false;
+const fresh=o=>Object.assign({},o,{dice:[1,1,1,1,1],held:[0,0,0,0,0],rl:0,sc:{}});
+const newMe=host=>({g:1,nm:String(state.name||'Jugador').slice(0,18),av:state.avatar,host:!!host,ph:'lobby',stake:0,gid:0,dice:[1,1,1,1,1],held:[0,0,0,0,0],rl:0,sc:{}});
+function plist(){const ps=[{id:myPeer,p:me,me:true}];if(room)room.peers().forEach(x=>{if(!x.isMe&&x.presence&&x.presence.g)ps.push({id:x.peer,p:x.presence,me:false})});return ps.sort((a,b)=>(b.p.host?1:0)-(a.p.host?1:0)||(a.id<b.id?-1:a.id>b.id?1:0))}
+const fill=p=>Object.keys(p.sc||{}).length,tot=p=>Object.values(p.sc||{}).reduce((a,b)=>a+b,0);
+function pts(d,c,first){const n=[0,0,0,0,0,0,0];d.forEach(v=>n[v]++);const m=Math.max(...n.slice(1)),s=[...d].sort().join('');
+ if(c<=6)return n[c]*c;
+ if(c==='E')return ['12345','23456','13456'].includes(s)?(first?25:20):0;
+ if(c==='F')return(n.includes(3)&&n.includes(2))?(first?35:30):0;
+ if(c==='P')return m>=4?(first?45:40):0;
+ return m===5?(first?100:50):0}
+function info(){
+ const ps=plist(),h=ps.find(x=>x.p.host);let ph;
+ if(mode==='solo')ph=fill(me)>=10?'end':'play';
+ else{ph=h?h.p.ph:'lobby';if(ph==='play'&&ps.every(x=>x.p.gid===h.p.gid&&fill(x.p)>=10))ph='end'}
+ let cur=ps[0];ps.forEach(x=>{if(fill(x.p)<fill(cur.p))cur=x});
+ return{ps,h,ph,cur};
+}
+function push(skip){if(room)room.presence(me).catch(()=>{});if(!skip)tick()}
+function leave(){if(room)room.leave().catch(()=>{});room=null;mode='menu';me=null;seenLobby=false;tick()}
+async function enter(code,host){
+ const R=(window.claude&&claude.use)?await claude.use('room'):null;
+ if(!R){showToast('Las salas no están disponibles en tu sesión (iniciá sesión en claude.ai)','lose');return}
+ try{room=await R.join('gen-'+code)}catch(e){room=null;showToast('No se pudo entrar a la sala','lose');return}
+ mode='room';code_=code;me=newMe(host);myGid=0;settled=0;seenLobby=false;
+ room.onPeers(()=>{const m=room&&room.peers().find(x=>x.isMe&&x.sameTab);if(m)myPeer=m.peer;clearTimeout(tmr);tmr=setTimeout(tick,60)});
+ push();
+}
+function tick(){
+ if(!$('genBody'))return;
+ if(mode==='menu'){render();return}
+ const I=info(),h=I.h;
+ if(mode==='room'&&h&&!h.me){
+  if(h.p.ph==='lobby')seenLobby=true;
+  if(h.p.ph==='play'&&h.p.gid!==myGid){
+   if(!seenLobby){showToast('La partida ya empezó. Esperá a que termine.','info');leave();return}
+   myGid=h.p.gid;stake=h.p.stake||0;
+   if(stake>0&&!asTab('gen',()=>payBet(stake))){showToast('No tenés saldo para la apuesta de la sala','lose');leave();return}
+   me=Object.assign(fresh(me),{gid:myGid});push(true);I.ps=plist();
+  }
+ }
+ const I2=info();
+ if(I2.ph==='end'&&settled!==myGid){settled=myGid;
+  if(stake>0){const t=I2.ps.map(x=>tot(x.p)),mx=Math.max(...t),w=I2.ps.filter((x,i)=>t[i]===mx);
+   if(w.some(x=>x.me))asTab('gen',()=>recordWin(Math.round(stake*I2.ps.length/w.length),true))}}
+ render(I2);
+}
+const BT=(a,t,x,c)=>`<button data-a='${a}' ${x||''} class='${c||'gold-btn px-4 py-2 rounded-xl'}'>${t}</button>`;
+const GB='px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 font-bold text-sm';
+function render(I){
+ const B=$('genBody');let o='';
+ if(mode==='menu'){
+  o=`<p class='text-xs text-slate-400 mb-3'>5 dados, hasta 3 tiradas por turno: guardá los que te sirven y anotá en una categoría (o tachá). Escalera 20 (25 servida) · Full 30 (35) · Póker 40 (45) · Generala 50 (100 servida).</p>
+  <div class='flex flex-wrap gap-2 mb-4'>${BT('solo','🎯 Practicar solo')}${BT('create','🏠 Crear sala',0,GB)}</div>
+  <div class='flex gap-2 items-center mb-3'><input id='genCode' maxlength='12' placeholder='Código de sala' class='bg-slate-950/90 border border-slate-700 focus:border-gold rounded-xl px-3 py-2 text-sm font-bold text-white uppercase w-40'>${BT('join','Unirme',0,GB)}</div>
+  <p class='text-[11px] text-slate-500'>Para jugar con un amigo: compartile el link de esta página con permiso para interactuar (tiene que tener sesión iniciada en claude.ai) y pasale el código de tu sala.</p>`;
+  B.innerHTML=o;return}
+ const {ps,h,ph,cur}=I,myT=ph==='play'&&cur.me;
+ if(mode==='room'&&ph==='lobby'){
+  const host=me.host;
+  o=`<div class='text-center'><div class='text-xs text-slate-400'>Código de sala</div><div class='font-royal text-4xl text-gold tracking-widest my-1'>${esc(code_.toUpperCase())}</div>${BT('copy','📋 Copiar código',0,GB)}</div>
+  <div class='my-4'><div class='text-xs font-bold text-slate-400 mb-1'>Jugadores (${ps.length})</div>${ps.map(x=>`<div class='py-1 text-sm'>${esc(x.p.av)} ${esc(x.p.nm)}${x.p.host?' 👑':''}${x.me?' (vos)':''}</div>`).join('')}${h?'':"<div class='text-xs text-rose-300'>Esperando al anfitrión…</div>"}</div>`;
+  if(host)o+=`<div class='text-xs font-bold text-slate-400 mb-1'>Apuesta por jugador (dinero ficticio)</div><div class='flex flex-wrap gap-1 mb-3'>${[0,50,100,500,1000].map(v=>BT('stake',v?'$'+fmt(v):'Amistoso',`data-v='${v}'`,GB+(pick===v?' border-2 border-amber-400':''))).join('')}</div>${BT('start','▶ Empezar partida',ps.length<2?'disabled':'')}`;
+  else o+=`<div class='text-sm text-amber-300 text-center'>Esperando que el anfitrión inicie la partida…</div>`;
+  o+=`<div class='mt-4'>${BT('leave','Salir de la sala',0,GB)}</div>`;
+  B.innerHTML=o;return}
+ o=`<div class='flex items-center justify-between mb-2'><div class='text-sm font-bold text-amber-300'>${ph==='end'?'🏁 Fin de la partida':'Turno de '+esc(cur.p.av)+' '+esc(cur.p.nm)+(cur.me?' (¡vos!)':'')}</div>${stake?`<div class='text-xs text-slate-300'>Pozo $${fmt(stake*ps.length)}</div>`:''}</div>`;
+ if(ph!=='end'){
+  const hold=myT&&cur.p.rl>0&&cur.p.rl<3;
+  o+=`<div class='flex flex-wrap gap-2 justify-center my-3'>${cur.p.dice.map((v,i)=>`<button ${hold?`data-a='hold' data-i='${i}'`:'disabled'} style='font-size:3.4rem;line-height:1;padding:6px 10px;border-radius:14px;border:3px solid ${cur.p.held[i]?'#fbbf24':'#334155'};background:${cur.p.held[i]?'#fbbf2422':'#0f172a'};opacity:${cur.p.rl?1:.35}'>${DI[v-1]}</button>`).join('')}</div>`;
+  if(myT)o+=`<div class='text-center mb-1'>${BT('roll',me.rl>=3?'Elegí una categoría ↓':'🎲 Tirar ('+(3-me.rl)+' restantes)',me.rl>=3?'disabled':'')}</div><div class='text-center text-[11px] text-slate-400 mb-2'>${me.rl?'Tocá los dados que querés guardar y anotá abajo':'Tirá para empezar tu turno'}</div>`;
+ }
+ o+=`<div class='overflow-x-auto'><table class='w-full text-xs'><tr class='text-slate-400'><th></th>${ps.map(x=>`<th class='px-1'>${esc(x.p.av)} ${esc(x.p.nm)}${x.me?' (vos)':''}</th>`).join('')}</tr>${CATS.map(c=>`<tr class='border-b border-white/10'><td class='py-1 pr-2 font-bold'>${LAB[c]}</td>${ps.map(x=>{const v=(x.p.sc||{})[c];if(v!==undefined)return `<td class='text-center ${v?'text-emerald-400':'text-slate-500'}'>${v||'✖'}</td>`;if(x.me&&myT&&me.rl>0)return `<td class='text-center'><button data-a='take' data-c='${c}' class='px-2 py-0.5 rounded-lg bg-amber-500/25 border border-amber-400/50 font-bold'>${pts(me.dice,c,me.rl===1)||'tachar'}</button></td>`;return `<td class='text-center text-slate-600'>·</td>`}).join('')}</tr>`).join('')}<tr class='font-black text-amber-300'><td class='pt-2'>TOTAL</td>${ps.map(x=>`<td class='text-center pt-2'>${tot(x.p)}</td>`).join('')}</tr></table></div>`;
+ if(ph==='end'){
+  const t=ps.map(x=>tot(x.p)),mx=Math.max(...t),w=ps.filter((x,i)=>t[i]===mx);
+  o+=`<div class='text-center text-lg font-extrabold text-emerald-400 my-3'>${ps.length>1?'🏆 '+w.map(x=>esc(x.p.nm)).join(' y ')+(w.length>1?' empatan':' gana')+' con '+mx:'Hiciste '+mx+' puntos'}${stake&&w.some(x=>x.me)?' · ¡Cobrás $'+fmt(Math.round(stake*ps.length/w.length))+'!':''}</div><div class='flex gap-2 justify-center'>${mode==='solo'?BT('solo','Jugar otra vez'):(me.host?BT('lobby','Volver a la sala'):'')}${BT('leave','Salir',0,GB)}</div>`;
+ }else o+=`<div class='mt-3'>${BT('leave','Salir',0,GB)}</div>`;
+ B.innerHTML=o;
+}
+async function genAction(t){
+ const a=t.dataset.a;
+ if(a==='solo'){mode='solo';room=null;me=newMe(true);myGid=Date.now();me.gid=myGid;stake=0;push();return}
+ if(a==='create'){const c=Array.from({length:5},()=>'abcdefghjkmnpqrstuvwxyz23456789'[Math.floor(rand()*31)]).join('');await enter(c,true);return}
+ if(a==='join'){const c=($('genCode').value||'').trim().toLowerCase();if(!/^[a-z0-9]{3,12}$/.test(c)){showToast('Código inválido','lose');return}await enter(c,false);return}
+ if(a==='leave'){leave();return}
+ if(a==='copy'){try{navigator.clipboard.writeText(code_.toUpperCase())}catch(e){}showToast('Código copiado','info');return}
+ if(a==='stake'){pick=+t.dataset.v;tick();return}
+ if(a==='lobby'){me.ph='lobby';push();return}
+ if(a==='start'){if(plist().length<2){showToast('Necesitás al menos 2 jugadores','info');return}
+  if(pick>0&&!asTab('gen',()=>payBet(pick)))return;
+  stake=pick;myGid=Date.now();me=Object.assign(fresh(me),{ph:'play',stake,gid:myGid});settled=0;push();return}
+ const I=info();if(!(I.ph==='play'&&I.cur.me))return;
+ if(a==='roll'){if(me.rl>=3)return;const f=me.rl===0;me.dice=me.dice.map((v,i)=>f||!me.held[i]?1+Math.floor(rand()*6):v);if(f)me.held=[0,0,0,0,0];me.rl++;push();return}
+ if(a==='hold'){if(me.rl>0&&me.rl<3){const k=+t.dataset.i;me.held=me.held.map((x,i)=>i===k?1-x:x);push()}return}
+ if(a==='take'){if(me.rl<1)return;const c=CATS.find(k=>String(k)===t.dataset.c);if(me.sc[c]!==undefined)return;
+  me.sc=Object.assign({},me.sc,{[c]:pts(me.dice,c,me.rl===1)});me.dice=[1,1,1,1,1];me.held=[0,0,0,0,0];me.rl=0;push()}
+}
+$('genBody').addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(t&&!t.disabled)genAction(t)});
+tick();
+})();
 </script>
 </body>
 </html>
