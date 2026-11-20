@@ -1575,25 +1575,24 @@ setInterval(() => {
   $('liveTicker').textContent = `🔥 ${rnd(tickerNames)} ganó $${fmt(amt)} en ${rnd(tickerGames)}`;
 }, 4500);
 
-/* ===== TRAGAMONEDAS 777 · grilla 3x3 con 5 líneas (3 horizontales + 2 diagonales) + X de $100k =====
-   DÓNDE PEGARLO: al final del script PRINCIPAL de tu página (el que termina con
-   window.onload = function () { ... };) y ANTES de los scripts de extensiones
-   (estadísticas / auto-spin / tienda). Pegalo ahí adentro, sin tocar nada más.
-   Usa lo que ya existe en tu página: payBet, recordWin, registerLoss, updateUI, chip,
-   state.jp, playTone, trackMission, unlockAch y rand (azar criptográfico). */
+/* ===== TRAGAMONEDAS 777 · fix de íconos + 5 líneas (3H + 2D) + X de $100k ===== */
 (function () {
   const W = { '🍒': 6, '🍋': 5, '🔔': 4, '⭐': 3, '💎': 3, '7️⃣': 3 };
   const POOL = Object.entries(W).flatMap(([k, v]) => Array(v).fill(k));
   const MULT = { '7️⃣': 50, '💎': 25, '⭐': 15, '🔔': 10, '🍋': 6, '🍒': 4 };
   const PAIR = 1.5;
   const X_PAYOUT = 100000;
-
-  // Cada línea = fila que toma cada rodillo [rodillo0, rodillo1, rodillo2]
-  // 0..2: filas horizontales | 3: diagonal ↘ [0,1,2] | 4: diagonal ↙ [2,1,0]
   const LINES = [[0, 0, 0], [1, 1, 1], [2, 2, 2], [0, 1, 2], [2, 1, 0]];
   const LCOL = ['#f43f5e', '#22c55e', '#38bdf8', '#f59e0b', '#a78bfa'];
 
-  const pick = () => POOL[Math.floor(rand() * POOL.length)];
+  const safeRand = () => {
+    if (typeof rand === 'function') {
+      const v = Number(rand());
+      if (Number.isFinite(v) && v >= 0 && v < 1) return v;
+    }
+    return Math.random();
+  };
+  const pick = () => POOL[Math.floor(safeRand() * POOL.length)];
   const fmtNum = (n) => (typeof fmt === 'function' ? fmt(n) : Math.round(Number(n) || 0).toLocaleString('es-AR'));
 
   const strips = [0, 1, 2].map(i => document.getElementById('strip' + i));
@@ -1601,20 +1600,24 @@ setInterval(() => {
 
   const box = strips[0].closest('.relative') || strips[0].parentElement;
   const msgEl = document.getElementById('slotMsg');
-  let cur = [0, 1, 2].map(() => [pick(), pick(), pick()]); // cur[rodillo][fila]
+  let cur = [0, 1, 2].map(() => [pick(), pick(), pick()]);
   window.slotSpinning = false;
 
   const st = document.createElement('style');
   st.textContent = [
-    '.slot-win{background:radial-gradient(circle,#fef08a 0%,#fbbf24 70%)!important;border-radius:14px;animation:slotPulse .55s ease-in-out infinite alternate}',
-    '.slot-x-win{background:radial-gradient(circle,#fde047 0%,#f59e0b 75%)!important;box-shadow:0 0 18px rgba(251,191,36,.85);border-radius:14px;animation:slotPulse .45s ease-in-out infinite alternate}',
+    '[id^="strip"]{display:flex;flex-direction:column;width:100%;will-change:transform}',
+    '[id^="strip"]>div{display:flex;align-items:center;justify-content:center;min-height:64px;height:64px;font-size:2.35rem;line-height:1;user-select:none;color:#fff;font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif}',
+    '.slot-win{background:radial-gradient(circle,#fef08a 0%,#fbbf24 70%)!important;color:#111827!important;border-radius:14px;animation:slotPulse .55s ease-in-out infinite alternate}',
+    '.slot-x-win{background:radial-gradient(circle,#fde047 0%,#f59e0b 75%)!important;color:#111827!important;box-shadow:0 0 18px rgba(251,191,36,.85);border-radius:14px;animation:slotPulse .45s ease-in-out infinite alternate}',
     '@keyframes slotPulse{from{transform:scale(1)}to{transform:scale(1.12)}}'
   ].join('');
   document.head.appendChild(st);
 
   if (box) {
     [...box.children].forEach(c => {
-      if (c.classList && c.classList.contains('absolute')) c.style.display = 'none';
+      if (c.classList && c.classList.contains('absolute') && !c.querySelector('[id^="strip"]')) {
+        c.style.display = 'none';
+      }
     });
     if (!box.querySelector('.slot-lines-note')) {
       const note = document.createElement('div');
@@ -1624,13 +1627,23 @@ setInterval(() => {
     }
   }
 
+  function renderSymbol(sym) {
+    return `<span style="display:inline-flex;align-items:center;justify-content:center;width:100%;height:100%">${sym}</span>`;
+  }
+
   function setStrip(i, arr) {
     const s = strips[i];
     if (!s) return;
+    const winEl = s.closest('.slot-window') || s.parentElement;
+    const winH = winEl && winEl.clientHeight ? winEl.clientHeight : 192;
+    const cellH = Math.max(48, Math.round(winH / 3));
+
     s.style.transition = 'none';
-    s.style.transform = 'translateY(0)';
-    s.innerHTML = arr.map(x => '<div>' + x + '</div>').join('');
+    s.style.transform = 'translateY(0px)';
+    s.style.height = (arr.length * cellH) + 'px';
+    s.innerHTML = arr.map(x => `<div style="height:${cellH}px;min-height:${cellH}px;font-size:${Math.round(cellH * 0.62)}px">${renderSymbol(x)}</div>`).join('');
   }
+
   cur.forEach((c, i) => setStrip(i, c));
 
   function clearWin() {
@@ -1795,12 +1808,16 @@ setInterval(() => {
     const turbo = window.turboOn ? 0.3 : 1;
     const res = [0, 1, 2].map(() => [pick(), pick(), pick()]);
     [0, 1, 2].forEach(i => {
+      const s = strips[i];
+      const winEl = s.closest('.slot-window') || s.parentElement;
+      const winH = winEl && winEl.clientHeight ? winEl.clientHeight : 192;
+      const cellH = Math.max(48, Math.round(winH / 3));
       const arr = [...cur[i], ...Array.from({ length: 16 + i * 7 }, pick), ...res[i]];
       setStrip(i, arr);
-      const s = strips[i];
       void s.offsetHeight;
+      const targetPx = (arr.length - 3) * cellH;
       s.style.transition = 'transform ' + ((1.8 + i * 0.65) * turbo) + 's cubic-bezier(.15,.7,.15,1)';
-      s.style.transform = 'translateY(-' + ((arr.length - 3) / arr.length * 100) + '%)';
+      s.style.transform = 'translateY(-' + targetPx + 'px)';
       cur[i] = res[i];
       for (let k = 0; k < 8 + i * 3; k++) {
         setTimeout(() => {
