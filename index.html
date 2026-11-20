@@ -3351,5 +3351,99 @@ $('genBody').addEventListener('click',e=>{const t=e.target.closest('[data-a]');i
 tick();
 })();
 </script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
+  import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAueq5ttYCj2p_Xl98kkmK-vciFej0gh14",
+    authDomain: "fakesino.firebaseapp.com",
+    projectId: "fakesino",
+    storageBucket: "fakesino.firebasestorage.app",
+    messagingSenderId: "282027063230",
+    appId: "1:282027063230:web:a9a1a44ac17e2a1959ebef",
+  };
+
+  const STORAGE_KEY = "rc_vip_v5";
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  let nubeLista = false;
+
+  function leerEstadoLocal() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      console.error("Error leyendo localStorage:", e);
+      return null;
+    }
+  }
+
+  async function guardarEstadoEnNube(estado) {
+    const user = auth.currentUser;
+    if (!user || !nubeLista || !estado) return;
+    try {
+      await setDoc(doc(db, "jugadores", user.uid), {
+        estado: estado,
+        actualizadoEn: Date.now()
+      }, { merge: true });
+      console.log("Guardado en Firestore OK.");
+    } catch (e) {
+      console.error("Error guardando en Firestore:", e);
+    }
+  }
+
+  window.sincronizarNube = async () => {
+    nubeLista = true;
+    const localData = leerEstadoLocal();
+    if (!localData) {
+      console.warn("No hay datos en rc_vip_v5 para subir.");
+      return;
+    }
+    await guardarEstadoEnNube(localData);
+  };
+
+  const originalSetItem = localStorage.setItem.bind(localStorage);
+  localStorage.setItem = function(key, value) {
+    originalSetItem(key, value);
+    if (key === STORAGE_KEY && nubeLista) {
+      try {
+        guardarEstadoEnNube(JSON.parse(value));
+      } catch (_) {}
+    }
+  };
+
+  signInAnonymously(auth).catch((err) => console.error("Error Auth:", err));
+
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) return;
+    console.log("Auth lista. UID:", user.uid);
+    const ref = doc(db, "jugadores", user.uid);
+    const snap = await getDoc(ref);
+    const localData = leerEstadoLocal();
+
+    if (snap.exists()) {
+      const cloudDoc = snap.data();
+      const cloudEstado = cloudDoc.estado;
+      const cloudTime = cloudDoc.actualizadoEn || 0;
+      const localTime = (localData && localData._updatedAt) || 0;
+
+      if (cloudEstado && (!localData || cloudTime >= localTime)) {
+        originalSetItem(STORAGE_KEY, JSON.stringify(cloudEstado));
+        console.log("Progreso cargado desde Firestore.");
+      } else if (localData) {
+        await setDoc(ref, { estado: localData, actualizadoEn: Date.now() }, { merge: true });
+        console.log("Progreso local subido a Firestore.");
+      }
+    } else if (localData) {
+      await setDoc(ref, { estado: localData, actualizadoEn: Date.now() }, { merge: true });
+      console.log("Documento inicial creado en Firestore.");
+    }
+
+    nubeLista = true;
+  });
+</script>
 </body>
 </html>
