@@ -3391,7 +3391,7 @@ tick();
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
   import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+  import { getFirestore, doc, getDoc, setDoc, onSnapshot, updateDoc, deleteField } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAueq5ttYCj2p_Xl98kkmK-vciFej0gh14",
@@ -3440,6 +3440,64 @@ tick();
       return;
     }
     await guardarEstadoEnNube(localData);
+  };
+
+  window.fsSalas = {
+    async unirse(codigo, jugadorInicial, onCambio) {
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
+      const uid = auth.currentUser.uid;
+      const salaRef = doc(db, "salas", codigo);
+
+      await setDoc(salaRef, {
+        actualizadoEn: Date.now(),
+        jugadores: {
+          [uid]: jugadorInicial
+        }
+      }, { merge: true });
+
+      const unsub = onSnapshot(salaRef, (snap) => {
+        if (!snap.exists()) {
+          onCambio([], uid);
+          return;
+        }
+        const data = snap.data() || {};
+        const mapJug = data.jugadores || {};
+        const lista = Object.entries(mapJug).map(([peerId, pres]) => ({
+          peer: peerId,
+          isMe: peerId === uid,
+          sameTab: peerId === uid,
+          presence: pres
+        }));
+        onCambio(lista, uid);
+      }, (err) => {
+        console.error("Error escuchando sala:", err);
+      });
+
+      return {
+        uid,
+        async actualizar(estadoJugador) {
+          await setDoc(salaRef, {
+            actualizadoEn: Date.now(),
+            jugadores: {
+              [uid]: estadoJugador
+            }
+          }, { merge: true });
+        },
+        async salir() {
+          try {
+            unsub();
+          } catch (_) {}
+          try {
+            await updateDoc(salaRef, {
+              [`jugadores.${uid}`]: deleteField(),
+              actualizadoEn: Date.now()
+            });
+          } catch (_) {}
+        }
+      };
+    }
   };
 
   const originalSetItem = localStorage.setItem.bind(localStorage);
