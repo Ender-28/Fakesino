@@ -3246,14 +3246,15 @@ apply();
 })();
 </script>
 <script>
-/* ===== GENERALA + SALAS ===== */
+/* ===== GENERALA (SOLO + SALAS) ===== */
 (function(){
 const CATS=[1,2,3,4,5,6,'E','F','P','G'],LAB={1:'1️⃣ Unos',2:'2️⃣ Doses',3:'3️⃣ Treses',4:'4️⃣ Cuatros',5:'5️⃣ Cincos',6:'6️⃣ Seises',E:'Escalera',F:'Full',P:'Póker',G:'Generala'},DI=['⚀','⚁','⚂','⚃','⚄','⚅'];
+const PICK_WINDOW_MS=25000;
 const esc=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 let mode='menu',room=null,me=null,myGid=0,settled=0,stake=0,pick=0,tmr=null,myPeer='me',code_='',seenLobby=false;
-let fsPeersCache=[],fsConn=null;
-const fresh=o=>Object.assign({},o,{dice:[1,1,1,1,1],held:[0,0,0,0,0],rl:0,sc:{}});
-const newMe=host=>({g:1,nm:String(state.name||'Jugador').slice(0,18),av:state.avatar,host:!!host,ph:'lobby',stake:0,gid:0,dice:[1,1,1,1,1],held:[0,0,0,0,0],rl:0,sc:{},turnToken:0,nextTurnId:'',seenTokens:{}});
+let fsPeersCache=[],fsConn=null,pickTimer=null;
+const fresh=o=>Object.assign({},o,{dice:[1,1,1,1,1],held:[0,0,0,0,0],rl:0,sc:{},pickDeadline:0});
+const newMe=host=>({g:1,nm:String(state.name||'Jugador').slice(0,18),av:state.avatar,host:!!host,ph:'lobby',stake:0,gid:0,dice:[1,1,1,1,1],held:[0,0,0,0,0],rl:0,sc:{},turnToken:0,nextTurnId:'',seenTokens:{},pickDeadline:0});
 function plist(){
  const ps=[];
  if(me)ps.push({id:myPeer,p:me,me:true});
@@ -3269,16 +3270,71 @@ function pts(d,c,first){const n=[0,0,0,0,0,0,0];d.forEach(v=>n[v]++);const m=Mat
  return m===5?(first?100:50):0}
 function info(){
  const ps=plist(),h=ps.find(x=>x.p.host);let ph;
+ const activePs=ps.filter(x=>x.p.ph==='play'&&(!h||x.p.gid===h.p.gid));
  if(mode==='solo')ph=fill(me)>=10?'end':'play';
- else{ph=h?h.p.ph:'lobby';if(ph==='play'&&ps.every(x=>x.p.gid===h.p.gid&&fill(x.p)>=10))ph='end'}
- let cur=ps[0];ps.forEach(x=>{if(fill(x.p)<fill(cur.p))cur=x});
+ else{
+  ph=h?h.p.ph:'lobby';
+  if(ph==='play'&&activePs.length>0&&activePs.every(x=>fill(x.p)>=10))ph='end';
+ }
+ const pending=activePs.filter(x=>fill(x.p)<10);
+ let cur=(pending[0]||activePs[0]||ps[0]);
  if(ph==='play'&&h&&h.p.turnId){
-  cur=ps.find(x=>x.id===h.p.turnId)||cur;
+  const byTurn=pending.find(x=>x.id===h.p.turnId)||activePs.find(x=>x.id===h.p.turnId);
+  if(byTurn)cur=byTurn;
  }
  return{ps,h,ph,cur};
 }
+function getRemainingPickSec(p){
+ if(!p||!p.pickDeadline||!((p.rl||0)>0))return 0;
+ return Math.max(0,Math.ceil((p.pickDeadline-Date.now())/1000));
+}
+function passToNextPlayer(){
+ if(mode!=='room'||!me)return;
+ const turn=info(),turnIndex=turn.ps.findIndex(x=>x.me);
+ let next=null;
+ for(let step=1;step<=turn.ps.length;step++){
+  const cand=turn.ps[(turnIndex+step)%turn.ps.length];
+  if(cand&&fill(cand.p)<10){next=cand;break}
+ }
+ me.turnToken=(+me.turnToken||0)+1;
+ me.nextTurnId=next?next.id:'';
+}
+function autoScratchIfExpired(){
+ if(!me||fill(me)>=10||!me.pickDeadline||!((me.rl||0)>0))return;
+ if(Date.now()<me.pickDeadline)return;
+ const freeCat=CATS.find(c=>(me.sc||{})[c]===undefined);
+ if(freeCat!==undefined){
+  me.sc=Object.assign({},me.sc,{[freeCat]:0});
+  showToast('⏰ Tiempo agotado (25s): se tachó '+LAB[freeCat],'lose');
+ }else{
+  showToast('⏰ Tiempo agotado (25s): turno pasado','info');
+ }
+ me.dice=[1,1,1,1,1];me.held=[0,0,0,0,0];me.rl=0;me.pickDeadline=0;
+ passToNextPlayer();
+ push();
+}
+function syncPickCountdown(myT,curP){
+ clearInterval(pickTimer);
+ const activeDeadline=(myT&&me&&me.rl>0&&me.pickDeadline)?me.pickDeadline:((curP&&curP.rl>0&&curP.pickDeadline)?curP.pickDeadline:0);
+ if(!activeDeadline)return;
+ pickTimer=setInterval(()=>{
+  if(!$('genBody')){clearInterval(pickTimer);return}
+  const cdEl=$('genPickClock');
+  const rem=Math.max(0,Math.ceil((activeDeadline-Date.now())/1000));
+  if(cdEl){
+   cdEl.textContent=rem+'s';
+   cdEl.className=rem<=7?'text-rose-400 font-black':'text-amber-300 font-black';
+  }
+  if(myT&&rem<=0){
+   clearInterval(pickTimer);
+   autoScratchIfExpired();
+  }else if(rem<=0){
+   clearInterval(pickTimer);
+  }
+ },250);
+}
 function push(skip){if(fsConn&&me)fsConn.actualizar(me).catch(()=>{});if(!skip)tick()}
-function leave(){if(fsConn){fsConn.salir().catch(()=>{});fsConn=null}fsPeersCache=[];room=null;mode='menu';me=null;seenLobby=false;tick()}
+function leave(){clearInterval(pickTimer);if(fsConn){fsConn.salir().catch(()=>{});fsConn=null}fsPeersCache=[];room=null;mode='menu';me=null;seenLobby=false;tick()}
 async function enter(code,host){
  if(!window.fsSalas){showToast('Firebase todavía no está listo, recargá e intentá de nuevo','lose');return}
  mode='room';code_=code;me=newMe(host);myGid=0;settled=0;seenLobby=false;fsPeersCache=[];
@@ -3294,15 +3350,18 @@ async function enter(code,host){
   myPeer=fsConn.uid;
   tick();
  }catch(e){
-  console.error(e);
+  console.error('Error al entrar a sala:',e);
   fsConn=null;room=null;mode='menu';
-  showToast('No se pudo entrar a la sala','lose');
+  const msg=(e&&e.message==='AUTH_NO_DISPONIBLE')
+   ?'Activá Anonymous Auth en Firebase Console o recargá la página'
+   :'No se pudo entrar a la sala';
+  showToast(msg,'lose');
   tick();
  }
 }
 function tick(){
  if(!$('genBody'))return;
- if(mode==='menu'){render();return}
+ if(mode==='menu'){clearInterval(pickTimer);render();return}
  const I=info(),h=I.h;
  if(mode==='room'&&h&&!h.me){
   if(h.p.ph==='lobby')seenLobby=true;
@@ -3326,8 +3385,13 @@ function tick(){
   });
   if(changed){h.p.seenTokens=seen;push(true)}
  }
+ if(me&&me.rl>0&&me.pickDeadline&&Date.now()>=me.pickDeadline){
+  autoScratchIfExpired();
+  return;
+ }
  const I2=info();
  if(I2.ph==='end'&&settled!==myGid){settled=myGid;
+  clearInterval(pickTimer);
   if(stake>0){const t=I2.ps.map(x=>tot(x.p)),mx=Math.max(...t),w=I2.ps.filter((x,i)=>t[i]===mx);
    if(w.some(x=>x.me))asTab('gen',()=>recordWin(Math.round(stake*I2.ps.length/w.length),true))}}
  render(I2);
@@ -3337,18 +3401,18 @@ const GB='px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 font-bold text-sm
 function render(I){
  const B=$('genBody');let o='';
  if(mode==='menu'){
-  o=`<p class='text-xs text-slate-400 mb-3'>5 dados y hasta 3 tiradas por turno. Después de cada tirada, tocá los dados que querés guardar y elegí una categoría; si no suma, podés tacharla. Las combinaciones servidas (en la primera tirada) dan puntos extra.</p>
+  o=`<p class='text-xs text-slate-400 mb-3'>5 dados y hasta 3 tiros por turno, con <b>25 segundos</b> para anotar o tachar manualmente una categoría. Las combinaciones servidas (en el 1.er tiro) dan puntos extra.</p>
   <div class='grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4 text-center text-[11px]'>
    <div class='rounded-xl bg-slate-900/70 border border-white/10 p-2'><b class='block text-amber-300'>Escalera</b>20 · servida 25</div>
    <div class='rounded-xl bg-slate-900/70 border border-white/10 p-2'><b class='block text-amber-300'>Full</b>30 · servido 35</div>
    <div class='rounded-xl bg-slate-900/70 border border-white/10 p-2'><b class='block text-amber-300'>Póker</b>40 · servido 45</div>
-   <div class='rounded-xl bg-slate-900/70 border border-white/10 p-2'><b class='block text-amber-300'>Generala</b>50 · servida 100</div>
+   <div class='rounded-xl bg-slate-900/70 border border-white/10 p-2'><b class='block text-amber-300'>Generala</b>50 · servido 100</div>
   </div>
   <div class='flex flex-wrap gap-2 mb-4'>${BT('solo','🎯 Practicar solo')}${BT('create','🏠 Crear sala',0,GB)}</div>
   <div class='flex gap-2 items-center mb-3'><input id='genCode' maxlength='12' placeholder='Código de sala' class='bg-slate-950/90 border border-slate-700 focus:border-gold rounded-xl px-3 py-2 text-sm font-bold text-white uppercase w-40'>${BT('join','Unirme',0,GB)}</div>
   <p class='text-[11px] text-slate-500'>Para jugar con un amigo: compartile el link de esta página y pasale el código de tu sala.</p>`;
   B.innerHTML=o;return}
- const {ps,h,ph,cur}=I,myT=ph==='play'&&cur.me;
+ const {ps,h,ph,cur}=I,myT=ph==='play'&&cur&&cur.me&&fill(me)<10&&fill(cur.p)<10;
  if(mode==='room'&&ph==='lobby'){
   const host=me.host;
   o=`<div class='text-center'><div class='text-xs text-slate-400'>Código de sala</div><div class='font-royal text-4xl text-gold tracking-widest my-1'>${esc(code_.toUpperCase())}</div>${BT('copy','📋 Copiar código',0,GB)}</div>
@@ -3359,11 +3423,12 @@ function render(I){
   B.innerHTML=o;return}
  o=`<div class='flex items-center justify-between gap-2 mb-3'><div class='text-sm font-bold text-amber-300'>${ph==='end'?'🏁 Fin de la partida':'Turno de '+esc(cur.p.av)+' '+esc(cur.p.nm)+(cur.me?' (¡vos!)':'')}</div>${stake?`<div class='text-xs text-slate-300 shrink-0'>Pozo $${fmt(stake*ps.length)}</div>`:''}</div>`;
  if(ph!=='end'){
-  const round=Math.min(fill(cur.p)+1,10),remaining=Math.max(0,10-fill(cur.p));
+  const round=Math.min(fill(cur.p)+1,10);
+  const remSec=getRemainingPickSec(cur.p);
   o+=`<div class='rounded-xl border border-amber-400/20 bg-slate-950/60 p-3 mb-3'>
    <div class='flex flex-wrap items-center justify-between gap-2 text-xs'>
-    <span class='font-extrabold text-amber-200'>Ronda ${round} de 10</span>
-    <span class='text-slate-300'>${myT?`Tiradas realizadas: ${me.rl}/3 · te quedan ${remaining} categorías`:`${fill(cur.p)} de 10 categorías anotadas`}</span>
+    <span class='font-extrabold text-amber-200'>Ronda ${round} de 10 · Tiros: ${cur.p.rl||0}/3</span>
+    <span class='text-slate-300'>${cur.p.rl>0?`⏱️ Tiempo para anotar/tachar: <b id='genPickClock' class='${remSec<=7?'text-rose-400 font-black':'text-amber-300 font-black'}'>${remSec}s</b>`:`${fill(cur.p)} de 10 categorías anotadas`}</span>
    </div>
    <div class='h-1.5 rounded-full bg-slate-700 mt-2 overflow-hidden'><div class='h-full rounded-full bg-amber-400 transition-all' style='width:${Math.min(fill(cur.p)*10,100)}%'></div></div>
   </div>`;
@@ -3371,7 +3436,7 @@ function render(I){
  if(ph!=='end'){
   const hold=myT&&cur.p.rl>0&&cur.p.rl<3;
   o+=`<div role='group' aria-label='Dados de ${esc(cur.p.nm)}' class='flex flex-wrap gap-2 justify-center my-3'>${cur.p.dice.map((v,i)=>`<button ${hold?`data-a='hold' data-i='${i}' aria-pressed='${!!cur.p.held[i]}' aria-label='Dado ${i+1}: ${v}${cur.p.held[i]?' guardado':' sin guardar'}' title='${cur.p.held[i]?'Tocar para soltar':'Tocar para guardar'}'`:`disabled aria-label='Dado ${i+1}: ${cur.p.rl?v:'sin tirar'}'`} style='font-size:3.4rem;line-height:1;padding:6px 10px;border-radius:14px;border:3px solid ${cur.p.held[i]?'#fbbf24':'#334155'};background:${cur.p.held[i]?'#fbbf2422':'#0f172a'};opacity:${cur.p.rl?1:.7};cursor:${hold?'pointer':'default'}'>${cur.p.rl?DI[v-1]:'🎲'}</button>`).join('')}</div>`;
-  if(myT)o+=`<div class='text-center mb-1'>${BT('roll',me.rl>=3?'Elegí una categoría ↓':'🎲 Tirar ('+(3-me.rl)+' restantes)',me.rl>=3?'disabled':'')}</div><div class='text-center text-[11px] text-slate-400 mb-2'>${me.rl?`Tocá los dados para guardarlos · anotá una categoría${me.rl===1?' · ✨ ¡Servida!':''}`:'Tirá para empezar tu turno'}</div>`;
+  if(myT)o+=`<div class='text-center mb-1'>${BT('roll',(me.rl||0)>=3?'3/3 tiros · Elegí o tachá una categoría ↓':'🎲 Tirar ('+(3-(me.rl||0))+' de 3 restantes)',(me.rl||0)>=3?'disabled':'')}</div><div class='text-center text-[11px] text-slate-400 mb-2'>${me.rl?`Tiro ${me.rl}/3 · tenés 25s para anotar o tachar manualmente${me.rl===1?' · ✨ ¡Servida!':''}`:'Tiro 0/3 · tirá para empezar tu turno'}</div>`;
  }
  o+=`<div class='overflow-x-auto rounded-xl border border-white/10'><table class='w-full text-xs'><caption class='sr-only'>Planilla de puntuación de Generala</caption><thead><tr class='text-slate-400 bg-slate-950/60'><th scope='col' class='p-2 text-left'>Categoría</th>${ps.map(x=>`<th scope='col' class='px-2 py-2 text-center min-w-[92px]'><div>${esc(x.p.av)} ${esc(x.p.nm)}${x.me?' (vos)':''}</div><div class='text-[10px] mt-1'>${fill(x.p)}/10 categorías</div><div role='progressbar' aria-label='Progreso de ${esc(x.p.nm)}' aria-valuemin='0' aria-valuemax='10' aria-valuenow='${fill(x.p)}' class='h-1 rounded-full bg-slate-700 mt-1 overflow-hidden'><div class='h-full bg-amber-400' style='width:${Math.min(fill(x.p)*10,100)}%'></div></div></th>`).join('')}</tr></thead><tbody>${CATS.map(c=>`<tr class='border-b border-white/10 last:border-0'><th scope='row' class='py-2 px-2 text-left font-bold whitespace-nowrap'>${LAB[c]}</th>${ps.map(x=>{const v=(x.p.sc||{})[c];if(v!==undefined)return `<td class='text-center ${v?'text-emerald-400 font-extrabold':'text-slate-500'}'>${v||'✖'}</td>`;if(x.me&&myT&&me.rl>0){const value=pts(me.dice,c,me.rl===1);return `<td class='text-center'><button data-a='take' data-c='${c}' aria-label='${value?`Anotar ${value} puntos en ${LAB[c]}`:`Tachar ${LAB[c]} (0 puntos)`}' class='px-2 py-1 rounded-lg bg-amber-500/20 border border-amber-400/40 hover:bg-amber-500/40 font-bold whitespace-nowrap'>${value?`${value} pts`:'0 · tachar'}</button></td>`}return `<td class='text-center text-slate-600'>·</td>`}).join('')}</tr>`).join('')}<tr class='font-black text-amber-300 bg-slate-950/50'><th scope='row' class='pt-2 pb-2 px-2 text-left'>TOTAL</th>${ps.map(x=>`<td class='text-center pt-2'>${tot(x.p)}</td>`).join('')}</tr></tbody></table></div>`;
  if(ph==='end'){
@@ -3379,6 +3444,7 @@ function render(I){
   o+=`<div class='text-center text-lg font-extrabold text-emerald-400 my-3'>${ps.length>1?'🏆 '+w.map(x=>esc(x.p.nm)).join(' y ')+(w.length>1?' empatan':' gana')+' con '+mx:'Hiciste '+mx+' puntos'}${stake&&w.some(x=>x.me)?' · ¡Cobrás $'+fmt(Math.round(stake*ps.length/w.length))+'!':''}</div><div class='flex gap-2 justify-center'>${mode==='solo'?BT('solo','Jugar otra vez'):(me.host?BT('lobby','Volver a la sala'):'')}${BT('leave','Salir',0,GB)}</div>`;
  }else o+=`<div class='mt-3'>${BT('leave','Salir',0,GB)}</div>`;
  B.innerHTML=o;
+ syncPickCountdown(myT,cur&&cur.p);
 }
 async function genAction(t){
  const a=t.dataset.a;
@@ -3388,20 +3454,37 @@ async function genAction(t){
  if(a==='leave'){leave();return}
  if(a==='copy'){try{navigator.clipboard.writeText(code_.toUpperCase())}catch(e){}showToast('Código copiado','info');return}
  if(a==='stake'){pick=+t.dataset.v;tick();return}
- if(a==='lobby'){me.ph='lobby';push();return}
+ if(a==='lobby'){me.ph='lobby';me.pickDeadline=0;push();return}
  if(a==='start'){if(plist().length<2){showToast('Necesitás al menos 2 jugadores','info');return}
   if(pick>0&&!asTab('gen',()=>payBet(pick)))return;
-  stake=pick;myGid=Date.now();const first=plist()[0];me=Object.assign(fresh(me),{ph:'play',stake,gid:myGid,turnId:first.id,seenTokens:{}});settled=0;push();return}
- const I=info();if(!(I.ph==='play'&&I.cur.me))return;
- if(a==='roll'){if(me.rl>=3)return;const f=me.rl===0;me.dice=me.dice.map((v,i)=>f||!me.held[i]?1+Math.floor(rand()*6):v);if(f)me.held=[0,0,0,0,0];me.rl++;push();return}
- if(a==='hold'){if(me.rl>0&&me.rl<3){const k=+t.dataset.i;me.held=me.held.map((x,i)=>i===k?1-x:x);push()}return}
- if(a==='take'){if(me.rl<1)return;const c=CATS.find(k=>String(k)===t.dataset.c);if(me.sc[c]!==undefined)return;
-  me.sc=Object.assign({},me.sc,{[c]:pts(me.dice,c,me.rl===1)});me.dice=[1,1,1,1,1];me.held=[0,0,0,0,0];me.rl=0;
-  const turn=info(),turnIndex=turn.ps.findIndex(x=>x.me);
-  const next=turn.ps[(turnIndex+1)%turn.ps.length];
-  me.turnToken=(+me.turnToken||0)+1;
-  me.nextTurnId=next?next.id:'';
-  push()}
+  stake=pick;myGid=Date.now();const first=plist()[0];me=Object.assign(fresh(me),{ph:'play',stake,gid:myGid,turnId:first.id,seenTokens:{},pickDeadline:0});settled=0;push();return}
+ const I=info();if(!(I.ph==='play'&&I.cur&&I.cur.me))return;
+ if(me&&me.rl>0&&me.pickDeadline&&Date.now()>=me.pickDeadline){autoScratchIfExpired();return}
+ if(a==='roll'){
+  if(fill(me)>=10||(me.rl||0)>=3)return;
+  const f=(me.rl||0)===0;
+  me.dice=me.dice.map((v,i)=>f||!me.held[i]?1+Math.floor(rand()*6):v);
+  if(f)me.held=[0,0,0,0,0];
+  me.rl=(me.rl||0)+1;
+  if(!me.pickDeadline)me.pickDeadline=Date.now()+PICK_WINDOW_MS;
+  push();
+  return;
+ }
+ if(a==='hold'){
+  if(fill(me)>=10)return;
+  if(me.rl>0&&me.rl<3){const k=+t.dataset.i;me.held=me.held.map((x,i)=>i===k?1-x:x);push()}
+  return;
+ }
+ if(a==='take'){
+  if(fill(me)>=10||me.rl<1)return;
+  const c=CATS.find(k=>String(k)===t.dataset.c);
+  if(c===undefined||me.sc[c]!==undefined)return;
+  me.sc=Object.assign({},me.sc,{[c]:pts(me.dice,c,me.rl===1)});
+  me.dice=[1,1,1,1,1];me.held=[0,0,0,0,0];me.rl=0;me.pickDeadline=0;
+  clearInterval(pickTimer);
+  passToNextPlayer();
+  push();
+ }
 }
 $('genBody').addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(t&&!t.disabled)genAction(t)});
 tick();
