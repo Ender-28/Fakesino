@@ -3251,9 +3251,15 @@ apply();
 const CATS=[1,2,3,4,5,6,'E','F','P','G'],LAB={1:'1️⃣ Unos',2:'2️⃣ Doses',3:'3️⃣ Treses',4:'4️⃣ Cuatros',5:'5️⃣ Cincos',6:'6️⃣ Seises',E:'Escalera',F:'Full',P:'Póker',G:'Generala'},DI=['⚀','⚁','⚂','⚃','⚄','⚅'];
 const esc=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 let mode='menu',room=null,me=null,myGid=0,settled=0,stake=0,pick=0,tmr=null,myPeer='me',code_='',seenLobby=false;
+let fsPeersCache=[],fsConn=null;
 const fresh=o=>Object.assign({},o,{dice:[1,1,1,1,1],held:[0,0,0,0,0],rl:0,sc:{}});
 const newMe=host=>({g:1,nm:String(state.name||'Jugador').slice(0,18),av:state.avatar,host:!!host,ph:'lobby',stake:0,gid:0,dice:[1,1,1,1,1],held:[0,0,0,0,0],rl:0,sc:{},turnToken:0,nextTurnId:'',seenTokens:{}});
-function plist(){const ps=[{id:myPeer,p:me,me:true}];if(room)room.peers().forEach(x=>{if(!x.isMe&&x.presence&&x.presence.g)ps.push({id:x.peer,p:x.presence,me:false})});return ps.sort((a,b)=>(b.p.host?1:0)-(a.p.host?1:0)||(a.id<b.id?-1:a.id>b.id?1:0))}
+function plist(){
+ const ps=[];
+ if(me)ps.push({id:myPeer,p:me,me:true});
+ fsPeersCache.forEach(x=>{if(!x.isMe&&x.presence&&x.presence.g)ps.push({id:x.peer,p:x.presence,me:false})});
+ return ps.sort((a,b)=>(b.p.host?1:0)-(a.p.host?1:0)||(a.id<b.id?-1:a.id>b.id?1:0));
+}
 const fill=p=>Object.keys(p.sc||{}).length,tot=p=>Object.values(p.sc||{}).reduce((a,b)=>a+b,0);
 function pts(d,c,first){const n=[0,0,0,0,0,0,0];d.forEach(v=>n[v]++);const m=Math.max(...n.slice(1)),s=[...d].sort().join('');
  if(c<=6)return n[c]*c;
@@ -3271,15 +3277,28 @@ function info(){
  }
  return{ps,h,ph,cur};
 }
-function push(skip){if(room)room.presence(me).catch(()=>{});if(!skip)tick()}
-function leave(){if(room)room.leave().catch(()=>{});room=null;mode='menu';me=null;seenLobby=false;tick()}
+function push(skip){if(fsConn&&me)fsConn.actualizar(me).catch(()=>{});if(!skip)tick()}
+function leave(){if(fsConn){fsConn.salir().catch(()=>{});fsConn=null}fsPeersCache=[];room=null;mode='menu';me=null;seenLobby=false;tick()}
 async function enter(code,host){
- const R=(window.claude&&claude.use)?await claude.use('room'):null;
- if(!R){showToast('Las salas no están disponibles en tu sesión (iniciá sesión en claude.ai)','lose');return}
- try{room=await R.join('gen-'+code)}catch(e){room=null;showToast('No se pudo entrar a la sala','lose');return}
- mode='room';code_=code;me=newMe(host);myGid=0;settled=0;seenLobby=false;
- room.onPeers(()=>{const m=room&&room.peers().find(x=>x.isMe&&x.sameTab);if(m)myPeer=m.peer;clearTimeout(tmr);tmr=setTimeout(tick,60)});
- push();
+ if(!window.fsSalas){showToast('Firebase todavía no está listo, recargá e intentá de nuevo','lose');return}
+ mode='room';code_=code;me=newMe(host);myGid=0;settled=0;seenLobby=false;fsPeersCache=[];
+ try{
+  fsConn=await window.fsSalas.unirse(code,me,(lista,uid)=>{
+   myPeer=uid;
+   fsPeersCache=lista;
+   const mine=lista.find(x=>x.isMe&&x.presence);
+   if(mine&&me)me=Object.assign({},mine.presence);
+   clearTimeout(tmr);tmr=setTimeout(tick,60);
+  });
+  room=fsConn;
+  myPeer=fsConn.uid;
+  tick();
+ }catch(e){
+  console.error(e);
+  fsConn=null;room=null;mode='menu';
+  showToast('No se pudo entrar a la sala','lose');
+  tick();
+ }
 }
 function tick(){
  if(!$('genBody'))return;
@@ -3327,7 +3346,7 @@ function render(I){
   </div>
   <div class='flex flex-wrap gap-2 mb-4'>${BT('solo','🎯 Practicar solo')}${BT('create','🏠 Crear sala',0,GB)}</div>
   <div class='flex gap-2 items-center mb-3'><input id='genCode' maxlength='12' placeholder='Código de sala' class='bg-slate-950/90 border border-slate-700 focus:border-gold rounded-xl px-3 py-2 text-sm font-bold text-white uppercase w-40'>${BT('join','Unirme',0,GB)}</div>
-  <p class='text-[11px] text-slate-500'>Para jugar con un amigo: compartile el link de esta página con permiso para interactuar (tiene que tener sesión iniciada en claude.ai) y pasale el código de tu sala.</p>`;
+  <p class='text-[11px] text-slate-500'>Para jugar con un amigo: compartile el link de esta página y pasale el código de tu sala.</p>`;
   B.innerHTML=o;return}
  const {ps,h,ph,cur}=I,myT=ph==='play'&&cur.me;
  if(mode==='room'&&ph==='lobby'){
