@@ -1575,82 +1575,124 @@ setInterval(() => {
   $('liveTicker').textContent = `🔥 ${rnd(tickerNames)} ganó $${fmt(amt)} en ${rnd(tickerGames)}`;
 }, 4500);
 
-/* ==================== 1. SLOTS 777 ==================== */
-const SLOT_WEIGHTS = { '🍒': 6, '🍋': 5, '🔔': 4, '⭐': 3, '💎': 3, '7️⃣': 3 };
-const slotPool = Object.entries(SLOT_WEIGHTS).flatMap(([k, v]) => Array(v).fill(k));
-const slotMults = { '7️⃣': 50, '💎': 25, '⭐': 15, '🔔': 10, '🍋': 6, '🍒': 4 };
-let slotSpinning = false;
-let reelCurrent = [0, 1, 2].map(() => [rnd(slotPool), rnd(slotPool), rnd(slotPool)]);
+/* ===== TRAGAMONEDAS 777 — DIAGONALES Y FORMACIÓN EN X (100K) ===== */
+(function () {
+  const SYMBOLS = ['🍒', '🍋', '🔔', '💎', '🍀', '7️⃣'];
+  const PAYTABLE = {
+    '🍒': 4,
+    '🍋': 6,
+    '🔔': 12,
+    '💎': 25,
+    '🍀': 40,
+    '7️⃣': 100
+  };
+  const X_JACKPOT_PAYOUT = 100000;
 
-function renderStrip(i, arr) {
-  const el = $('strip' + i);
-  el.style.transition = 'none';
-  el.style.transform = 'translateY(0px)';
-  el.innerHTML = arr.map(sym => `<div>${sym}</div>`).join('');
-}
-reelCurrent.forEach((arr, i) => renderStrip(i, arr));
+  /**
+   * Evalúa una grilla de 3 filas x 3 columnas: grid[row][col]
+   * Soporta:
+   * - Líneas horizontales (3 iguales en una fila)
+   * - Diagonales principales: (0,0)-(1,1)-(2,2) y (0,2)-(1,1)-(2,0)
+   * - Formación en X: ambas diagonales completas con el mismo símbolo
+   *   (lo que implica que las 5 casillas de la X tienen el mismo símbolo) -> premio fijo de 100,000 ($100k).
+   */
+  function evaluateSlotGrid3x3(grid, betAmount = 0) {
+    const bet = Math.max(0, Number(betAmount) || 0);
+    const matches = [];
+    let totalPayout = 0;
 
-function spinSlots() {
-  if (slotSpinning || !payBet(chip)) return;
-  slotSpinning = true;
-  $('spinBtn').disabled = true;
-  trackMission('slot_spin', 1);
-  $('slotMsg').textContent = 'Girando los rodillos... 🍀';
-  $('slotMsg').className = 'min-h-[32px] text-center text-lg font-extrabold my-4 text-amber-300';
+    const d1Coords = [[0, 0], [1, 1], [2, 2]];
+    const d2Coords = [[0, 2], [1, 1], [2, 0]];
 
-  const bet = chip;
-  state.jp += Math.round(bet * 0.1);
-  updateUI();
+    const d1Vals = d1Coords.map(([r, c]) => grid[r][c]);
+    const d2Vals = d2Coords.map(([r, c]) => grid[r][c]);
 
-  const result = [rnd(slotPool), rnd(slotPool), rnd(slotPool)];
-  const cellH = window.innerWidth >= 640 ? 92 : 84;
+    const d1Same = d1Vals.every(v => v && v === d1Vals[0]);
+    const d2Same = d2Vals.every(v => v && v === d2Vals[0]);
+    const isXFormation = d1Same && d2Same && d1Vals[0] === d2Vals[0];
 
-  [0, 1, 2].forEach(i => {
-    const finalTriple = [rnd(slotPool), result[i], rnd(slotPool)];
-    const fullStrip = [...reelCurrent[i], ...Array.from({ length: 16 + i * 7 }, () => rnd(slotPool)), ...finalTriple];
-    renderStrip(i, fullStrip);
-    const el = $('strip' + i);
-    el.offsetHeight;
-    el.style.transition = `transform ${(1.8 + i * 0.65) * (window.turboOn ? 0.3 : 1)}s cubic-bezier(0.15, 0.82, 0.18, 1)`;
-    el.style.transform = `translateY(-${(fullStrip.length - 3) * cellH}px)`;
-    reelCurrent[i] = finalTriple;
-    for (let k = 0; k < 6 + i * 2; k++) {
-      setTimeout(() => playTone(320 + k * 30, 0.03, 'square', 0.025), k * 210);
-    }
-  });
-
-  setTimeout(() => {
-    try {
-      let win = 0;
-      const triple = result[0] === result[1] && result[1] === result[2];
-      if (triple) {
-        win = bet * slotMults[result[0]];
-        unlockAch('slot_777');
-        if (result[0] === '7️⃣') {
-          win += state.jp;
-          state.jp = 10000;
-        }
-      } else if (result[0] === result[1] || result[1] === result[2]) {
-        win = Math.round(bet * 1.5);
+    if (isXFormation) {
+      const sym = d1Vals[0];
+      totalPayout += X_JACKPOT_PAYOUT;
+      matches.push({
+        type: 'X',
+        label: `Formación en X (${sym})`,
+        symbol: sym,
+        coords: [...d1Coords, ...d2Coords],
+        payout: X_JACKPOT_PAYOUT,
+        isJackpotX: true
+      });
+    } else {
+      if (d1Same) {
+        const sym = d1Vals[0];
+        const mult = PAYTABLE[sym] || 5;
+        const win = Math.round(bet * mult);
+        totalPayout += win;
+        matches.push({
+          type: 'diag-main',
+          label: `Diagonal ↘ (${sym})`,
+          symbol: sym,
+          coords: d1Coords,
+          payout: win
+        });
       }
-
-      if (win > 0) {
-        recordWin(win, triple);
-        sfxWin(triple);
-        $('slotMsg').textContent = `${triple ? '🎉 ¡TRIPLE PREMIO!' : '✨ ¡Doble acierto!'} Ganaste $${fmt(win)}`;
-        $('slotMsg').className = 'min-h-[32px] text-center text-lg font-extrabold my-4 text-emerald-400';
-      } else {
-        registerLoss();
-        $('slotMsg').textContent = 'Sin premio esta vez · ¡Inténtalo de nuevo!';
-        $('slotMsg').className = 'min-h-[32px] text-center text-lg font-extrabold my-4 text-rose-400';
+      if (d2Same) {
+        const sym = d2Vals[0];
+        const mult = PAYTABLE[sym] || 5;
+        const win = Math.round(bet * mult);
+        totalPayout += win;
+        matches.push({
+          type: 'diag-anti',
+          label: `Diagonal ↙ (${sym})`,
+          symbol: sym,
+          coords: d2Coords,
+          payout: win
+        });
       }
-    } finally {
-      slotSpinning = false;
-      $('spinBtn').disabled = false;
-      if (typeof autoAfter === 'function') autoAfter();
     }
-  }, 3300 * (window.turboOn ? 0.3 : 1));
-}
+
+    // Líneas horizontales (filas 0, 1, 2)
+    for (let r = 0; r < 3; r++) {
+      const rowVals = [grid[r][0], grid[r][1], grid[r][2]];
+      if (rowVals.every(v => v && v === rowVals[0])) {
+        const sym = rowVals[0];
+        const mult = PAYTABLE[sym] || 5;
+        const win = Math.round(bet * mult);
+        totalPayout += win;
+        matches.push({
+          type: 'row',
+          row: r,
+          label: `Fila ${r + 1} (${sym})`,
+          symbol: sym,
+          coords: [[r, 0], [r, 1], [r, 2]],
+          payout: win
+        });
+      }
+    }
+
+    return {
+      grid,
+      matches,
+      totalPayout,
+      hasX: isXFormation,
+      hasDiagonal: d1Same || d2Same || isXFormation
+    };
+  }
+
+  function spinGrid3x3(randomFn = Math.random) {
+    return Array.from({ length: 3 }, () =>
+      Array.from({ length: 3 }, () => SYMBOLS[Math.floor(randomFn() * SYMBOLS.length)])
+    );
+  }
+
+  window.Slot777Engine = {
+    SYMBOLS,
+    PAYTABLE,
+    X_JACKPOT_PAYOUT,
+    spinGrid3x3,
+    evaluateSlotGrid3x3
+  };
+})();
 
 /* ==================== 2. EUROPEAN ROULETTE ==================== */
 const ROUL_ORDER = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
