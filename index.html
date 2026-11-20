@@ -1575,27 +1575,18 @@ setInterval(() => {
   $('liveTicker').textContent = `🔥 ${rnd(tickerNames)} ganó $${fmt(amt)} en ${rnd(tickerGames)}`;
 }, 4500);
 
-/* ===== TRAGAMONEDAS 777 — DIAGONALES Y FORMACIÓN EN X (100K) ===== */
+/* ===== TRAGAMONEDAS 777 — UI CON DIAGONALES, FORMACIÓN EN X (100K) Y LÍNEAS VISUALES ===== */
 (function () {
-  const SYMBOLS = ['🍒', '🍋', '🔔', '💎', '🍀', '7️⃣'];
+  const SYMBOLS = ['🍋', '🍒', '🔔', '⭐', '7'];
   const PAYTABLE = {
-    '🍒': 4,
-    '🍋': 6,
+    '🍋': 4,
+    '🍒': 6,
     '🔔': 12,
-    '💎': 25,
-    '🍀': 40,
-    '7️⃣': 100
+    '⭐': 25,
+    '7': 100
   };
   const X_JACKPOT_PAYOUT = 100000;
 
-  /**
-   * Evalúa una grilla de 3 filas x 3 columnas: grid[row][col]
-   * Soporta:
-   * - Líneas horizontales (3 iguales en una fila)
-   * - Diagonales principales: (0,0)-(1,1)-(2,2) y (0,2)-(1,1)-(2,0)
-   * - Formación en X: ambas diagonales completas con el mismo símbolo
-   *   (lo que implica que las 5 casillas de la X tienen el mismo símbolo) -> premio fijo de 100,000 ($100k).
-   */
   function evaluateSlotGrid3x3(grid, betAmount = 0) {
     const bet = Math.max(0, Number(betAmount) || 0);
     const matches = [];
@@ -1616,7 +1607,7 @@ setInterval(() => {
       totalPayout += X_JACKPOT_PAYOUT;
       matches.push({
         type: 'X',
-        label: `Formación en X (${sym})`,
+        label: `¡Formación en X (${sym})!`,
         symbol: sym,
         coords: [...d1Coords, ...d2Coords],
         payout: X_JACKPOT_PAYOUT,
@@ -1625,8 +1616,7 @@ setInterval(() => {
     } else {
       if (d1Same) {
         const sym = d1Vals[0];
-        const mult = PAYTABLE[sym] || 5;
-        const win = Math.round(bet * mult);
+        const win = Math.round(bet * (PAYTABLE[sym] || 5));
         totalPayout += win;
         matches.push({
           type: 'diag-main',
@@ -1638,8 +1628,7 @@ setInterval(() => {
       }
       if (d2Same) {
         const sym = d2Vals[0];
-        const mult = PAYTABLE[sym] || 5;
-        const win = Math.round(bet * mult);
+        const win = Math.round(bet * (PAYTABLE[sym] || 5));
         totalPayout += win;
         matches.push({
           type: 'diag-anti',
@@ -1651,13 +1640,11 @@ setInterval(() => {
       }
     }
 
-    // Líneas horizontales (filas 0, 1, 2)
     for (let r = 0; r < 3; r++) {
       const rowVals = [grid[r][0], grid[r][1], grid[r][2]];
       if (rowVals.every(v => v && v === rowVals[0])) {
         const sym = rowVals[0];
-        const mult = PAYTABLE[sym] || 5;
-        const win = Math.round(bet * mult);
+        const win = Math.round(bet * (PAYTABLE[sym] || 5));
         totalPayout += win;
         matches.push({
           type: 'row',
@@ -1685,12 +1672,84 @@ setInterval(() => {
     );
   }
 
+  function renderPaylinesSvg(matches) {
+    // Coordenadas normalizadas en viewBox 0 0 300 300 para 3 columnas y 3 filas
+    // Centros de columnas: 50, 150, 250 | Centros de filas: 50, 150, 250
+    const lines = [];
+    matches.forEach(m => {
+      if (m.type === 'row') {
+        const y = 50 + m.row * 100;
+        lines.push(`<line x1="25" y1="${y}" x2="275" y2="${y}" stroke="#fb7185" stroke-width="6" stroke-linecap="round" />`);
+      } else if (m.type === 'diag-main') {
+        lines.push(`<line x1="35" y1="35" x2="265" y2="265" stroke="#38bdf8" stroke-width="6" stroke-linecap="round" />`);
+      } else if (m.type === 'diag-anti') {
+        lines.push(`<line x1="265" y1="35" x2="35" y2="265" stroke="#a78bfa" stroke-width="6" stroke-linecap="round" />`);
+      } else if (m.type === 'X') {
+        lines.push(`<line x1="35" y1="35" x2="265" y2="265" stroke="#fbbf24" stroke-width="8" stroke-linecap="round" />`);
+        lines.push(`<line x1="265" y1="35" x2="35" y2="265" stroke="#fbbf24" stroke-width="8" stroke-linecap="round" />`);
+      }
+    });
+    if (!lines.length) return '';
+    return `<svg viewBox="0 0 300 300" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:10;filter:drop-shadow(0 0 8px rgba(251,191,36,0.75))">${lines.join('')}</svg>`;
+  }
+
+  function renderSlot777Board(container, grid, result, baseBet = 10) {
+    if (!container) return;
+    const winningSet = new Set();
+    (result?.matches || []).forEach(m => {
+      (m.coords || []).forEach(([r, c]) => winningSet.add(`${r}-${c}`));
+    });
+
+    const cellsHtml = [];
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        const sym = grid[r][c];
+        const isWin = winningSet.has(`${r}-${c}`);
+        const isX = Boolean(result?.hasX && isWin);
+        const symbolNode = sym === '7'
+          ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:10px;background:#3b82f6;color:#fff;font-weight:900;font-size:1.5rem;box-shadow:0 4px 12px rgba(59,130,246,0.45)">7</span>`
+          : `<span style="font-size:2.35rem;line-height:1">${sym}</span>`;
+
+        cellsHtml.push(`
+          <div data-cell="${r}-${c}" style="
+            display:flex;align-items:center;justify-content:center;height:82px;border-radius:14px;
+            background:${isX ? 'rgba(251,191,36,0.22)' : isWin ? 'rgba(56,189,248,0.16)' : 'rgba(255,255,255,0.94)'};
+            border:2px solid ${isX ? '#fbbf24' : isWin ? '#38bdf8' : 'rgba(148,163,184,0.35)'};
+            transform:${isWin ? 'scale(1.04)' : 'scale(1)'};
+            transition:all 160ms ease;
+          ">${symbolNode}</div>
+        `);
+      }
+    }
+
+    const statusMsg = !result
+      ? `Apuesta base: $${baseBet} · Filas, diagonales (↘ / ↙) y formación en X ($100k)`
+      : result.hasX
+        ? `🔥 ¡JACKPOT EN X! Ganaste $${result.totalPayout.toLocaleString('es-AR')}`
+        : result.totalPayout > 0
+          ? `✅ ¡Premio de $${result.totalPayout.toLocaleString('es-AR')}! (${result.matches.map(m => m.label).join(' + ')})`
+          : `Sin premio esta vez · ¡Inténtalo de nuevo!`;
+
+    container.innerHTML = `
+      <div style="position:relative;max-width:340px;margin:0 auto;padding:14px;border-radius:20px;background:#070b14;border:2px solid #f59e0b;box-shadow:0 16px 40px rgba(0,0,0,0.55)">
+        <div style="position:relative;display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+          ${cellsHtml.join('')}
+          ${renderPaylinesSvg(result?.matches || [])}
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:12px;font-weight:800;font-size:0.95rem;color:${result?.hasX ? '#fbbf24' : result?.totalPayout > 0 ? '#34d399' : '#f43f5e'}">
+        ${statusMsg}
+      </div>
+    `;
+  }
+
   window.Slot777Engine = {
     SYMBOLS,
     PAYTABLE,
     X_JACKPOT_PAYOUT,
     spinGrid3x3,
-    evaluateSlotGrid3x3
+    evaluateSlotGrid3x3,
+    renderSlot777Board
   };
 })();
 
