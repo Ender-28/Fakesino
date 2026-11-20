@@ -3274,9 +3274,9 @@ function info(){
 function push(skip){if(room)room.presence(me).catch(()=>{});if(!skip)tick()}
 function leave(){if(room)room.leave().catch(()=>{});room=null;mode='menu';me=null;seenLobby=false;tick()}
 async function enter(code,host){
- const R=(window.claude&&claude.use)?await claude.use('room'):null;
- if(!R){showToast('Las salas no están disponibles en tu sesión (iniciá sesión en claude.ai)','lose');return}
- try{room=await R.join('gen-'+code)}catch(e){room=null;showToast('No se pudo entrar a la sala','lose');return}
+ const R=window.fbRoom||((window.claude&&claude.use)?await claude.use('room'):null);
+ if(!R){showToast('Las salas no están disponibles. Revisá tu conexión.','lose');return}
+ try{room=await R.join('gen-'+code,host)}catch(e){room=null;showToast(e&&e.message==='nosala'?'Esa sala no existe. Revisá el código.':'No se pudo entrar a la sala','lose');return}
  mode='room';code_=code;me=newMe(host);myGid=0;settled=0;seenLobby=false;
  room.onPeers(()=>{const m=room&&room.peers().find(x=>x.isMe&&x.sameTab);if(m)myPeer=m.peer;clearTimeout(tmr);tmr=setTimeout(tick,60)});
  push();
@@ -3327,7 +3327,7 @@ function render(I){
   </div>
   <div class='flex flex-wrap gap-2 mb-4'>${BT('solo','🎯 Practicar solo')}${BT('create','🏠 Crear sala',0,GB)}</div>
   <div class='flex gap-2 items-center mb-3'><input id='genCode' maxlength='12' placeholder='Código de sala' class='bg-slate-950/90 border border-slate-700 focus:border-gold rounded-xl px-3 py-2 text-sm font-bold text-white uppercase w-40'>${BT('join','Unirme',0,GB)}</div>
-  <p class='text-[11px] text-slate-500'>Para jugar con un amigo: compartile el link de esta página con permiso para interactuar (tiene que tener sesión iniciada en claude.ai) y pasale el código de tu sala.</p>`;
+  <p class='text-[11px] text-slate-500'>Para jugar con un amigo: creá una sala, pasale el código y que lo escriba en &quot;Unirme&quot; desde esta misma página. Funciona desde cualquier dispositivo.</p>`;
   B.innerHTML=o;return}
  const {ps,h,ph,cur}=I,myT=ph==='play'&&cur.me;
  if(mode==='room'&&ph==='lobby'){
@@ -3391,7 +3391,7 @@ tick();
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
   import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
-  import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+  import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, deleteField } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAueq5ttYCj2p_Xl98kkmK-vciFej0gh14",
@@ -3407,6 +3407,44 @@ tick();
   const auth = getAuth(app);
   const db = getFirestore(app);
   let nubeLista = false;
+
+  /* ===== Salas de Generala sobre Firestore: salas/{gen-codigo}.players.{uid} ===== */
+  const authP = new Promise((res) => { const un = onAuthStateChanged(auth, (u) => { if (u) { res(u); un(); } }); });
+  window.fbRoom = makeFbRoom({ db, auth, authP, doc, getDoc, setDoc, updateDoc, onSnapshot, deleteField });
+  function makeFbRoom(F) {
+    const { db, auth, authP, doc, getDoc, setDoc, updateDoc, onSnapshot, deleteField } = F;
+    return {
+      async join(name, host) {
+        const user = auth.currentUser || await Promise.race([authP, new Promise((_, rj) => setTimeout(() => rj(new Error('auth')), 8000))]);
+        const uid = user.uid, ref = doc(db, 'salas', name);
+        if (host) await setDoc(ref, { creada: Date.now() }, { merge: true });
+        else if (!(await getDoc(ref)).exists()) throw new Error('nosala');
+        let players = {}, mine = {}, ls = [], dead = false;
+        const peers = () => {
+          const a = Object.entries(players)
+            .filter(([id, v]) => v && (id === uid || Date.now() - (v._t || 0) < 150000))
+            .map(([id, v]) => ({ peer: id, by: id, isMe: id === uid, sameTab: id === uid, kind: 'viewer', guest: false, presence: v, updatedAt: v._t || 0 }));
+          if (!a.some((x) => x.isMe) && mine.g) a.push({ peer: uid, by: uid, isMe: true, sameTab: true, kind: 'viewer', guest: false, presence: mine, updatedAt: 0 });
+          return a;
+        };
+        const fire = () => { if (!dead) ls.forEach((f) => { try { f({ peers: peers() }); } catch (e) {} }); };
+        const write = async () => {
+          if (dead) return;
+          mine._t = Date.now();
+          await updateDoc(ref, { ['players.' + uid]: JSON.parse(JSON.stringify(mine)) });
+        };
+        const unsub = onSnapshot(ref, (s) => { players = (s.data() || {}).players || {}; fire(); }, () => {});
+        const hb = setInterval(() => { if (mine.g) write().catch(() => {}); fire(); }, 20000);
+        return {
+          name,
+          presence: async (p) => { mine = Object.assign({}, mine, p); await write(); },
+          peers,
+          onPeers: (f) => { ls.push(f); return () => { ls = ls.filter((x) => x !== f); }; },
+          leave: async () => { dead = true; clearInterval(hb); unsub(); try { await updateDoc(ref, { ['players.' + uid]: deleteField() }); } catch (e) {} }
+        };
+      }
+    };
+  }
 
   function leerEstadoLocal() {
     try {
